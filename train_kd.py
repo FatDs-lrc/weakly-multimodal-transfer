@@ -11,7 +11,7 @@ def make_path(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def eval(model, val_iter):
+def eval(model, val_iter, is_save=False, phase='test'):
     model.eval()
     total_pred = []
     total_label = []
@@ -31,11 +31,27 @@ def eval(model, val_iter):
     f1 = f1_score(total_label, total_pred, average='macro')
     cm = confusion_matrix(total_label, total_pred)
     model.train()
+    
+    # save test results
+    if is_save:
+        save_dir = model.save_dir
+        np.save(os.path.join(save_dir, '{}_pred.npy'.format(phase)), total_pred)
+        np.save(os.path.join(save_dir, '{}_label.npy'.format(phase)), total_label)
+
     return acc, uar, f1, cm
 
+def clean_chekpoints(expr_name, store_epoch):
+    root = os.path.join('checkpoints', expr_name)
+    for checkpoint in os.listdir(root):
+        if not checkpoint.startswith(str(store_epoch)+'_') and checkpoint.endswith('pth'):
+            os.remove(os.path.join(root, checkpoint))
+
 if __name__ == '__main__':
-    opt = TrainOptions().parse()   # get training options
-    logger_path = os.path.join(opt.log_dir, opt.name) # get logger path
+    opt = TrainOptions().parse()                        # get training options
+    logger_path = os.path.join(opt.log_dir, opt.name, str(opt.cvNo)) # get logger path
+    if not os.path.exists(logger_path):                 # make sure logger path exists
+        os.mkdir(logger_path)
+    
     suffix = '_'.join([opt.model, opt.dataset_mode])    # get logger suffix
     logger = get_logger(logger_path, suffix)            # get logger
     dataset, val_dataset, tst_dataset = create_trn_val_tst_dataset(opt)  # create a dataset given opt.dataset_mode and other options
@@ -72,16 +88,22 @@ if __name__ == '__main__':
                 model.save_networks(save_suffix)
 
             iter_data_time = time.time()
+        
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
 
         logger.info('End of training epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
-        model.update_learning_rate()                     # update learning rates at the end of every epoch.
+        model.update_learning_rate(logger)                     # update learning rates at the end of every epoch.
         acc, uar, f1, cm = eval(model, val_dataset)
         logger.info('Val result of epoch %d / %d acc %.4f uar %.4f f1 %.4f' % (epoch, opt.niter + opt.niter_decay, acc, uar, f1))
         logger.info('\n{}'.format(cm))
+
+        # acc, uar, f1, cm = eval(model, tst_dataset)
+        # logger.info('Tst result of epoch %d acc %.4f uar %.4f f1 %.4f' % (epoch, acc, uar, f1))
+        # logger.info('\n{}'.format(cm))
+
         if uar > best_eval_uar:
             best_eval_epoch = epoch
             best_eval_uar = uar
@@ -90,6 +112,12 @@ if __name__ == '__main__':
     # test
     logger.info('Loading best model found on val set: epoch-%d' % best_eval_epoch)
     model.load_networks(best_eval_epoch)
-    acc, uar, f1, cm = eval(model, tst_dataset)
+    _ = eval(model, val_dataset, is_save=True, phase='val')
+    acc, uar, f1, cm = eval(model, tst_dataset, is_save=True, phase='test')
     logger.info('Tst result acc %.4f uar %.4f f1 %.4f' % (acc, uar, f1))
     logger.info('\n{}'.format(cm))
+    clean_chekpoints(opt.name + '/' + str(opt.cvNo), best_eval_epoch)
+
+    if opt.cvNo >= 10:
+        cmd = 'python auto_test.py {}'.format(opt.name)
+        os.system(cmd)

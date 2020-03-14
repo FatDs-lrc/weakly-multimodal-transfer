@@ -110,7 +110,6 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
         net.to(gpu_ids[0])
         net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
     init_weights(net, init_type, init_gain=init_gain)
-    print(net)
     return net
 
 
@@ -131,4 +130,65 @@ def diagnose_network(net, name='network'):
         mean = mean / count
     print(name)
     print(mean)
+
+class MidLayerFeatureExtractor(object):
+    def __init__(self, layer, cuda=True):
+        self.layer = layer
+        self.feature = None
+        self.layer.register_forward_hook(self.hook)
+        self.cuda = cuda
+    
+    def hook(self, module, input, output):
+        size = output.data.size()
+        self.feature = torch.Tensor(size)
+        self.is_empty = True
+        if self.cuda:
+            self.feature = self.feature.cuda()
+        
+        self.feature.copy_(output.data)
+        self.is_empty = False
+    
+    def extract(self):
+        assert not self.is_empty, 'Synic Error in MidLayerFeatureExtractor'
+        return self.feature
+    
+class MultiLayerFeatureExtractor(object):
+    def __init__(self, net, layers, cuda=True):
+        '''
+        Parameter:
+        -----------------
+        net: torch.nn.Modules
+        layers: str, something like "C.fc[0], module[1]"
+                which will get mid layer features in net.C.fc[0] and net.module[1] respectively
+        '''
+        self.net = net
+        self.cuda = cuda
+        self.layer_names = layers.strip().split(',')
+        self.layers = [self.str2layer(layer_name) for layer_name in self.layer_names]
+        self.extractors = [MidLayerFeatureExtractor(layer, self.cuda) for layer in self.layers]
+
+    def str2layer(self, name):
+        modules = name.split('.')
+        layer = self.net
+        for module in modules:
+            if '[' and ']' in module:
+                sequential_name = module[:module.find('[')]
+                target_module_num = int(module[module.find('[')+1:module.find(']')])
+                layer = getattr(layer, sequential_name)
+                layer = layer[target_module_num]
+            else:
+                layer = getattr(layer, module)
+        
+        return layer
+    
+    def extract(self):
+        ans = [extractor.extract() for extractor in self.extractors]
+        return ans
+   
+        
+    
+
+    
+
+
 

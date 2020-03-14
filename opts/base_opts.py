@@ -3,6 +3,7 @@ import os
 import torch
 import models
 import data
+import json
 
 
 class BaseOptions():
@@ -37,7 +38,7 @@ class BaseOptions():
         parser.add_argument('--batch_size', type=int, default=256, help='input batch size')
         parser.add_argument('--serial_batches', action='store_true', help='if true, takes images in order to make batches, otherwise takes them randomly')
         parser.add_argument('--max_dataset_size', type=int, default=float("inf"), help='Maximum number of samples allowed per dataset. If the dataset directory contains more than max_dataset_size, only a subset is loaded.')
-        
+
         # additional parameters
         parser.add_argument('--epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
         parser.add_argument('--load_iter', type=int, default='0', help='which iteration to load? if load_iter > 0, the code will load models by iter_[load_iter]; otherwise, the code will load models by [epoch]')
@@ -90,7 +91,9 @@ class BaseOptions():
                 comment = '\t[default: %s]' % str(default)
             message += '{:>25}: {:<30}{}\n'.format(str(k), str(v), comment)
         message += '----------------- End -------------------'
-        print(message)
+
+        if opt.verbose:
+            print(message)
 
         # save to the disk
         expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
@@ -105,6 +108,15 @@ class BaseOptions():
         with open(file_name, 'wt') as opt_file:
             opt_file.write(message)
             opt_file.write('\n')
+    
+    def save_json(self, opt):
+        dictionary = {}
+        for k, v in sorted(vars(opt).items()):
+            dictionary[k] = v
+
+        expr_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        save_path = os.path.join(expr_dir, '{}_opt.conf'.format(opt.phase))
+        json.dump(dictionary, open(save_path, 'w'), indent=4)
 
     def parse(self):
         """Parse our options, create checkpoints directory suffix, and set up gpu device."""
@@ -115,7 +127,8 @@ class BaseOptions():
         if opt.suffix:
             suffix = ('_' + opt.suffix.format(**vars(opt))) if opt.suffix != '' else ''
             opt.name = opt.name + suffix
-
+            print("Expr Name:", opt.name)
+        
         self.print_options(opt)
 
         # set gpu ids
@@ -128,5 +141,8 @@ class BaseOptions():
         if len(opt.gpu_ids) > 0:
             torch.cuda.set_device(opt.gpu_ids[0])
 
+        if opt.isTrain:
+            self.save_json(opt)
+            
         self.opt = opt
         return self.opt

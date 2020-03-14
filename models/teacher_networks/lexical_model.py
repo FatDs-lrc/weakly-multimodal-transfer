@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.transformer.transformerEncoder import TransformerEncoder
-from models.transformer.transformerDecoder import TransformerDecoder
+from .transformer.transformerEncoder import TransformerEncoder
+from .transformer.transformerDecoder import TransformerDecoder
 
 class Flatten(nn.Module):
     def __init__(self):
@@ -38,13 +38,13 @@ class lexical_autoencoder(nn.Module):
             nn.ReLU(True),
             Flatten(),
             nn.Linear(171*4*4,512),
-            nn.Linear(512, 128)
+            nn.Linear(512,128)
         )
 
         self.deConv = nn.Sequential(
             
-            nn.Linear(128, 512),
-            nn.Linear(512, 171*4*4),
+            nn.Linear(128,512),
+            nn.Linear(512,171*4*4),
             Reshape(),
             nn.ConvTranspose2d(4, 64, 4, stride=3, padding=1),  
             nn.ReLU(True),

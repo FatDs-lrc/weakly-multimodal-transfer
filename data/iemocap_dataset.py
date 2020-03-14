@@ -9,11 +9,11 @@ class IemocapDataset(BaseDataset):
     def __init__(self, opt, set_name):
         ''' IEMOCAP dataset reader
             set_name in ['trn', 'val', 'tst']
-        
         '''
         super().__init__(opt)
         cvNo = opt.cvNo
-        acoustic_ft_type = 'IS10'
+        # acoustic_ft_type = 'IS10'
+        acoustic_ft_type = opt.acoustic_ft_type
         visual_ft = "denseface"
         lexical_ft = 'text'
         data_path = "/data2/ljj/sser_discrete_data/iemocap/feature/{}/crossVal{}/"

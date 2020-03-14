@@ -20,6 +20,9 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
 
         # training parameters
+        parser.add_argument('--acoustic_ft_type', type=str, default='IS10', help='# the type of the acoustic feature; [IS10, eGeMAPS]')
+        parser.add_argument('--lexical_ft_type', type=str, default='text', help='# the type of the acoustic feature; [text, glove]')
+        parser.add_argument('--visual_ft_type', type=str, default='denseface', help='# the type of the acoustic feature; [denseface]')
         parser.add_argument('--niter', type=int, default=20, help='# of iter at starting learning rate')
         parser.add_argument('--niter_decay', type=int, default=80, help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
@@ -27,5 +30,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_policy', type=str, default='linear', help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
 
+        # expr setting 
+        parser.add_argument('--run_idx', type=int, default=1, help='experiment number; for repeat experiment')
         self.isTrain = True
         return parser

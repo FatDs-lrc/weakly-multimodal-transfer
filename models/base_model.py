@@ -81,10 +81,23 @@ class BaseModel(ABC):
         """
         if self.isTrain:
             self.schedulers = [tools.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
-        if not self.isTrain or opt.continue_train:
-            load_suffix = 'iter_%d' % opt.load_iter if opt.load_iter > 0 else opt.epoch
-            self.load_networks(load_suffix)
+            for name in self.model_names:
+                net = getattr(self, 'net' + name)
+                net = tools.init_net(net, opt.init_type, opt.init_gain, opt.gpu_ids)
+                setattr(self, 'net' + name, net)
+        else:
+            self.eval()
+        # if not self.isTrain or opt.continue_train:
+        #     load_suffix = 'iter_%d' % opt.load_iter if opt.load_iter > 0 else opt.epoch
+        #     self.load_networks(load_suffix)
         self.print_networks(opt.verbose)
+
+    def cuda(self):
+        assert(torch.cuda.is_available())
+        for name in self.model_names:
+            net = getattr(self, 'net' + name)
+            net.to(self.gpu_ids[0])
+            net = torch.nn.DataParallel(net, self.gpu_ids)  # multi-GPUs
 
     def eval(self):
         """Make models eval mode during test time"""
@@ -106,15 +119,18 @@ class BaseModel(ABC):
         This function wraps <forward> function in no_grad() so we don't save intermediate steps for backprop
         It also calls <compute_visuals> to produce additional visualization results
         """
+        cur_is_train = self.isTrain
+        self.isTrain = False
         with torch.no_grad():
             self.forward()
             # self.compute_visuals()
+        self.isTrain = cur_is_train
 
     def compute_visuals(self):
         """Calculate additional output images for visdom and HTML visualization"""
         pass
 
-    def update_learning_rate(self):
+    def update_learning_rate(self, logger):
         """Update learning rates for all the networks; called at the end of every epoch"""
         for scheduler in self.schedulers:
             if self.opt.lr_policy == 'plateau':
@@ -123,7 +139,8 @@ class BaseModel(ABC):
                 scheduler.step()
 
         lr = self.optimizers[0].param_groups[0]['lr']
-        print('learning rate = %.7f' % lr)
+        # print('learning rate = %.7f' % lr)
+        logger.info('learning rate = %.7f' % lr)
 
     def get_current_visuals(self):
         """Return visualization images. train.py will display these images with visdom, and save the images to a HTML"""
@@ -169,6 +186,29 @@ class BaseModel(ABC):
             if isinstance(name, str):
                 load_filename = '%s_net_%s.pth' % (epoch, name)
                 load_path = os.path.join(self.save_dir, load_filename)
+                net = getattr(self, 'net' + name)
+                if isinstance(net, torch.nn.DataParallel):
+                    net = net.module
+                print('loading the model from %s' % load_path)
+                state_dict = torch.load(load_path, map_location=self.device)
+                if hasattr(state_dict, '_metadata'):
+                    del state_dict._metadata
+
+                net.load_state_dict(state_dict)
+    
+    def load_networks_cv(self, folder_path):
+        """Load all the networks from cv folder.
+
+        Parameters:
+            epoch (int) -- current epoch; used in the file name '%s_net_%s.pth' % (epoch, name)
+        """
+        checkpoints = list(filter(lambda x: x.endswith('.pth'), os.listdir(folder_path)))
+        for name in self.model_names:
+            if isinstance(name, str):
+                load_filename = list(filter(lambda x: x.split('.')[0].endswith('net_'+name), checkpoints))
+                assert len(load_filename) == 1, 'Exists file {}'.format(load_filename)
+                load_filename = load_filename[0]
+                load_path = os.path.join(folder_path, load_filename)
                 net = getattr(self, 'net' + name)
                 if isinstance(net, torch.nn.DataParallel):
                     net = net.module

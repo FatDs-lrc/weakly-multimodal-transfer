@@ -30,3 +30,12 @@ class classifier(nn.Module):
     def forward(self, x):
         pred = self.net(x)
         return pred
+
+if __name__ == '__main__':
+    def hook(module, input, output):
+        features.copy_(output.data.squeeze())
+        get_feature = True
+
+    c = classifier('discrete', 512)
+    handel = c.net[3].register_forward_hook(hook)
+    print(c)
